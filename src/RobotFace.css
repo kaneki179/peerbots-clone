@@ -1,0 +1,130 @@
+/* ================================================================
+   RobotFace.css — Styles et animations du visage
+   ================================================================ */
+
+.rf-container {
+  width: 100vw; height: 100vh;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  position: relative; overflow: hidden;
+  transition: background 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Cercles décoratifs en arrière-plan */
+.rf-bg-circles { position: absolute; inset: 0; pointer-events: none; }
+.rf-circle {
+  position: absolute; border-radius: 50%;
+  opacity: 0.12;
+  animation: floatCircle 8s ease-in-out infinite;
+}
+.rf-circle-1 {
+  width: 300px; height: 300px;
+  top: -80px; right: -80px;
+  animation-delay: 0s;
+}
+.rf-circle-2 {
+  width: 200px; height: 200px;
+  bottom: -50px; left: -50px;
+  animation-delay: -4s;
+}
+@keyframes floatCircle {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%       { transform: translate(15px, -15px) scale(1.05); }
+}
+
+/* Indicateur de connexion */
+.rf-status {
+  position: absolute; top: 20px; left: 20px;
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(0,0,0,0.2);
+  padding: 6px 12px; border-radius: 20px;
+  backdrop-filter: blur(4px);
+}
+.rf-status span { color: rgba(255,255,255,0.8); font-size: 12px; }
+.rf-dot { width: 10px; height: 10px; border-radius: 50%; }
+.rf-dot-on  { background: #00FF88; box-shadow: 0 0 8px #00FF88; animation: pulse 2s infinite; }
+.rf-dot-off { background: #FF4444; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; } 50% { opacity: 0.5; }
+}
+
+/* Badge d'expression */
+.rf-expr-badge {
+  position: absolute; top: 16px; right: 20px;
+  background: rgba(0,0,0,0.25);
+  color: white; font-size: 14px; font-weight: 600;
+  padding: 6px 16px; border-radius: 20px;
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255,255,255,0.2);
+}
+
+/* Wrapper du visage */
+.rf-face-wrapper {
+  position: relative; z-index: 1;
+  filter: drop-shadow(0 20px 40px rgba(0,0,0,0.3));
+  transition: transform 0.3s ease;
+}
+.rf-face-wrapper:hover { transform: scale(1.02); }
+.rf-face-wrapper.rf-speaking { animation: speakBounce 0.4s ease infinite alternate; }
+@keyframes speakBounce {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-6px); }
+}
+
+/* Transitions SVG */
+.rf-face-circle { transition: fill 0.6s ease; }
+.rf-iris        { transition: all 0.3s ease; }
+.rf-brow        { transition: d 0.4s ease; }
+.rf-mouth       { transition: all 0.4s ease; }
+.rf-cheek       { transition: opacity 0.4s ease; }
+.rf-eye-heart   { animation: heartbeat 0.8s ease-in-out infinite; }
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.1); }
+}
+
+/* Points de parole animés */
+.rf-dot-1 { animation: dotBounce 0.6s ease infinite alternate 0.0s; }
+.rf-dot-2 { animation: dotBounce 0.6s ease infinite alternate 0.1s; }
+.rf-dot-3 { animation: dotBounce 0.6s ease infinite alternate 0.2s; }
+@keyframes dotBounce {
+  from { transform: translateY(0); opacity: 0.4; }
+  to   { transform: translateY(-8px); opacity: 0.8; }
+}
+
+/* Bulle de discours */
+.rf-speech-bubble {
+  position: absolute; bottom: 60px;
+  left: 5%; right: 5%;
+  animation: bubbleIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+@keyframes bubbleIn {
+  from { transform: translateY(20px) scale(0.9); opacity: 0; }
+  to   { transform: translateY(0) scale(1); opacity: 1; }
+}
+.rf-speech-bubble-inner {
+  background: rgba(0,0,0,0.5);
+  color: white; font-size: 20px; font-weight: 500;
+  padding: 16px 24px; border-radius: 18px;
+  text-align: center; line-height: 1.4;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.15);
+}
+
+/* Code de salle */
+.rf-room-code {
+  position: absolute; bottom: 16px; left: 20px;
+  color: rgba(255,255,255,0.4); font-size: 11px;
+}
+
+/* Fin de session */
+.rf-session-ended {
+  text-align: center; color: white;
+  animation: fadeIn 1s ease;
+}
+.rf-session-ended h2 { font-size: 32px; margin: 16px 0 8px; }
+.rf-session-ended p  { font-size: 18px; opacity: 0.7; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to   { opacity: 1; transform: scale(1); }
+}
