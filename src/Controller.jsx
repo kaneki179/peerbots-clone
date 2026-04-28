@@ -1,10 +1,5 @@
 // ================================================================
-// Controller.jsx — VERSION PRO
-// Nouvelles fonctionnalités :
-// - Enregistrement voix du thérapeute (micro réel)
-// - Envoi audio base64 via Socket.io
-// - Bouton fin de session
-// - Design amélioré
+// Controller.jsx — Interface du thérapeute DAUST-Thérapie
 // ================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -54,9 +49,9 @@ const SCENARIOS = [
   },
   {
     id: 'farewell', name: '👋 Au revoir',
-    desc: 'Terminer positivement',
+    desc: 'Terminer la session positivement',
     steps: [
-      { expression: 'happy',   text: 'On a très bien travaillé aujourd\'hui !' },
+      { expression: 'happy',   text: 'On a très bien travaillé ensemble aujourd\'hui !' },
       { expression: 'excited', text: 'Tu as fait de super progrès !' },
       { expression: 'love',    text: 'À très bientôt ! Je t\'attendrai !' },
     ]
@@ -64,21 +59,22 @@ const SCENARIOS = [
 ];
 
 export default function Controller({ roomCode, onEndSession }) {
-  const [socket, setSocket]         = useState(null);
-  const [connected, setConnected]   = useState(false);
-  const [speechText, setSpeech]     = useState('');
-  const [activeExpr, setActive]     = useState('neutral');
-  const [running, setRunning]       = useState(null);
-  const [log, setLog]               = useState([]);
-  const [isRecording, setIsRec]     = useState(false);
-  const [hasAudio, setHasAudio]     = useState(false);
-  const [audioBlob, setAudioBlob]   = useState(null);
-  const [useRealVoice, setRealVoice]= useState(false);
-  const [showEndModal, setEndModal] = useState(false);
-  const [sessionTime, setTime]      = useState(0);
-  const mediaRef   = useRef(null);
-  const chunksRef  = useRef([]);
-  const timerRef   = useRef(null);
+  const [socket,       setSocket]    = useState(null);
+  const [connected,    setConnected] = useState(false);
+  const [speechText,   setSpeech]    = useState('');
+  const [activeExpr,   setActive]    = useState('neutral');
+  const [running,      setRunning]   = useState(null);
+  const [log,          setLog]       = useState([]);
+  const [isRecording,  setIsRec]     = useState(false);
+  const [hasAudio,     setHasAudio]  = useState(false);
+  const [audioBlob,    setAudioBlob] = useState(null);
+  const [mimeType,     setMimeType]  = useState('audio/webm');
+  const [useRealVoice, setRealVoice] = useState(false);
+  const [showEndModal, setEndModal]  = useState(false);
+  const [sessionTime,  setTime]      = useState(0);
+
+  const mediaRef  = useRef(null);
+  const chunksRef = useRef([]);
 
   const addLog = (msg) => {
     const t = new Date().toLocaleTimeString('fr-FR');
@@ -87,45 +83,54 @@ export default function Controller({ roomCode, onEndSession }) {
 
   // Timer de session
   useEffect(() => {
-    timerRef.current = setInterval(() => setTime(t => t + 1), 1000);
-    return () => clearInterval(timerRef.current);
+    const timer = setInterval(() => setTime(t => t + 1), 1000);
+    return () => clearInterval(timer);
   }, []);
 
   const formatTime = (s) => {
-    const m = Math.floor(s / 60).toString().padStart(2,'0');
-    const sec = (s % 60).toString().padStart(2,'0');
+    const m   = Math.floor(s / 60).toString().padStart(2, '0');
+    const sec = (s % 60).toString().padStart(2, '0');
     return `${m}:${sec}`;
   };
 
-  // Connexion Socket.io
+  // ── Connexion Socket.io ──────────────────────────────────────
   useEffect(() => {
     const s = io(SERVER_URL, { transports: ['websocket', 'polling'] });
-    s.on('connect',           () => { setConnected(true);  s.emit('join-room', roomCode); addLog('✅ Connecté'); });
+    s.on('connect', () => {
+      setConnected(true);
+      s.emit('join-room', roomCode);
+      addLog('✅ Connecté au serveur');
+    });
     s.on('disconnect',        () => { setConnected(false); addLog('❌ Déconnecté'); });
     s.on('partner-connected', () => addLog('🤖 Robot Face connecté !'));
     setSocket(s);
     return () => s.disconnect();
   }, [roomCode]);
 
-  // Envoyer une expression
+  // ── Envoyer une expression ───────────────────────────────────
   const sendExpression = (id) => {
     if (!socket || !connected) return;
     socket.emit('send-expression', { roomCode, expression: id });
     setActive(id);
-    addLog(`😊 Expression → ${id}`);
+    const e = EXPRESSIONS.find(x => x.id === id);
+    addLog(`${e.emoji} Expression → ${e.label}`);
   };
 
-  // Envoyer du texte TTS
+  // ── Envoyer texte TTS ou audio réel ─────────────────────────
   const sendSpeech = () => {
     if (!socket || !connected || !speechText.trim()) return;
 
     if (useRealVoice && audioBlob) {
-      // Envoyer l'audio enregistré
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64 = reader.result.split(',')[1];
-        socket.emit('send-audio', { roomCode, audioBase64: base64, text: speechText });
-        addLog(`🎙️ Audio envoyé → "${speechText}"`);
+        socket.emit('send-audio', {
+          roomCode,
+          audioBase64: base64,
+          mimeType,
+          text: speechText,
+        });
+        addLog(`🎙️ Voix réelle → "${speechText}"`);
         setSpeech('');
         setHasAudio(false);
         setAudioBlob(null);
@@ -138,12 +143,14 @@ export default function Controller({ roomCode, onEndSession }) {
     }
   };
 
+  // ── Phrase rapide ────────────────────────────────────────────
   const sendQuick = (phrase) => {
     if (!socket || !connected) return;
     socket.emit('send-speech', { roomCode, text: phrase });
-    addLog(`💬 Phrase rapide → "${phrase}"`);
+    addLog(`💬 Phrase → "${phrase}"`);
   };
 
+  // ── Lancer un scénario ───────────────────────────────────────
   const runScenario = (sc) => {
     if (!socket || !connected || running) return;
     socket.emit('send-scenario', { roomCode, scenario: sc });
@@ -152,26 +159,55 @@ export default function Controller({ roomCode, onEndSession }) {
     setTimeout(() => setRunning(null), sc.steps.length * 3500 + 1000);
   };
 
-  // ── ENREGISTREMENT MICROPHONE ──────────────────────────────────
+  // ── Enregistrement microphone ────────────────────────────────
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100,
+        }
+      });
+
+      const mimeTypes = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/mp4',
+      ];
+      const supported = mimeTypes.find(m => MediaRecorder.isTypeSupported(m));
+      const chosen    = supported || '';
+      setMimeType(chosen || 'audio/webm');
+
+      const mr = new MediaRecorder(stream, chosen ? { mimeType: chosen } : {});
       chunksRef.current = [];
-      mr.ondataavailable = e => chunksRef.current.push(e.data);
+
+      mr.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+      };
       mr.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const blob = new Blob(chunksRef.current, { type: chosen || 'audio/webm' });
         setAudioBlob(blob);
         setHasAudio(true);
         stream.getTracks().forEach(t => t.stop());
-        addLog('🎙️ Enregistrement terminé');
+        addLog(`🎙️ Enregistrement OK — ${Math.round(blob.size / 1024)} Ko`);
       };
-      mr.start();
+      mr.onerror = () => addLog('❌ Erreur enregistrement');
+
+      mr.start(100);
       mediaRef.current = mr;
       setIsRec(true);
       addLog('🔴 Enregistrement en cours...');
+
     } catch (e) {
-      alert('Microphone non disponible. Vérifiez les permissions.');
+      if (e.name === 'NotAllowedError') {
+        alert('Permission microphone refusée.\nVa dans Chrome → Paramètres du site → Microphone → Autoriser.');
+      } else if (e.name === 'NotFoundError') {
+        alert('Aucun microphone détecté sur cet appareil.');
+      } else {
+        alert('Erreur microphone : ' + e.message);
+      }
     }
   };
 
@@ -182,7 +218,7 @@ export default function Controller({ roomCode, onEndSession }) {
     }
   };
 
-  // ── FIN DE SESSION ─────────────────────────────────────────────
+  // ── Fin de session ───────────────────────────────────────────
   const endSession = () => {
     if (!socket) return;
     socket.emit('end-session', { roomCode });
@@ -191,16 +227,19 @@ export default function Controller({ roomCode, onEndSession }) {
     if (onEndSession) onEndSession();
   };
 
+  // ── Affichage du code de salle sans le mot de passe ─────────
+  const displayRoom = roomCode.split('_')[0];
+
   return (
     <div className="ctrl-container">
 
-      {/* ── HEADER ── */}
+      {/* ── HEADER ───────────────────────────────────────────── */}
       <div className="ctrl-header">
         <div className="ctrl-header-left">
           <div className="ctrl-logo">🤖</div>
           <div>
-            <h1>Contrôleur PEERbots</h1>
-            <p>Salle : <strong>{roomCode}</strong></p>
+            <h1>DAUST-Thérapie — Contrôleur</h1>
+            <p>Salle : <strong>{displayRoom}</strong></p>
           </div>
         </div>
         <div className="ctrl-header-right">
@@ -215,27 +254,28 @@ export default function Controller({ roomCode, onEndSession }) {
         </div>
       </div>
 
-      {/* ── MODAL FIN DE SESSION ── */}
+      {/* ── MODAL FIN DE SESSION ─────────────────────────────── */}
       {showEndModal && (
         <div className="modal-overlay">
           <div className="modal-card">
             <div style={{ fontSize: 48 }}>⏹️</div>
             <h2>Terminer la session ?</h2>
-            <p>Le Robot Face affichera un message de fin à l'enfant.</p>
-            <p>Durée de la session : <strong>{formatTime(sessionTime)}</strong></p>
+            <p>Le robot affichera un message d'au revoir à l'enfant.</p>
+            <p>Durée : <strong>{formatTime(sessionTime)}</strong></p>
             <div className="modal-buttons">
-              <button className="modal-btn-cancel" onClick={() => setEndModal(false)}>
-                Continuer
+              <button className="modal-btn-cancel"
+                onClick={() => setEndModal(false)}>
+                Continuer la session
               </button>
               <button className="modal-btn-confirm" onClick={endSession}>
-                Terminer la session
+                Terminer
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── CORPS ── */}
+      {/* ── CORPS ────────────────────────────────────────────── */}
       <div className="ctrl-body">
 
         {/* COLONNE GAUCHE */}
@@ -266,35 +306,40 @@ export default function Controller({ roomCode, onEndSession }) {
             </div>
           </div>
 
-          {/* Faire parler le robot */}
+          {/* Faire parler */}
           <div className="card">
             <div className="card-header">
               <span className="card-icon">🗣️</span>
               <h2>Faire parler le robot</h2>
             </div>
 
-            {/* Toggle voix réelle */}
+            {/* Toggle voix */}
             <div className="voice-toggle">
               <label className="toggle-label">
                 <span>Voix synthétique</span>
-                <div className={`toggle-switch ${useRealVoice ? 'active' : ''}`}
-                     onClick={() => setRealVoice(!useRealVoice)}>
+                <div
+                  className={`toggle-switch ${useRealVoice ? 'active' : ''}`}
+                  onClick={() => {
+                    setRealVoice(!useRealVoice);
+                    setHasAudio(false);
+                    setAudioBlob(null);
+                  }}
+                >
                   <div className="toggle-thumb"/>
                 </div>
                 <span>Ma vraie voix 🎙️</span>
               </label>
             </div>
 
-            {/* Zone d'enregistrement */}
+            {/* Zone enregistrement */}
             {useRealVoice && (
               <div className="record-zone">
                 <div className="record-info">
                   {isRecording
-                    ? '🔴 Enregistrement en cours... Parlez !'
+                    ? '🔴 Enregistrement... Parlez maintenant !'
                     : hasAudio
-                      ? '✅ Audio prêt à envoyer'
-                      : '🎙️ Cliquez pour enregistrer votre voix'
-                  }
+                      ? '✅ Audio prêt — écris le texte et envoie'
+                      : '🎙️ Clique pour enregistrer ta voix'}
                 </div>
                 <button
                   className={`record-btn ${isRecording ? 'recording' : ''}`}
@@ -308,32 +353,45 @@ export default function Controller({ roomCode, onEndSession }) {
             <textarea
               value={speechText}
               onChange={(e) => setSpeech(e.target.value)}
-              placeholder={useRealVoice
-                ? "Écris le texte qui s'affichera sur l'écran..."
-                : "Écris ce que le robot doit dire..."}
+              placeholder={
+                useRealVoice
+                  ? 'Texte affiché sur l\'écran de l\'enfant...'
+                  : 'Écris ce que le robot doit dire...'
+              }
               rows={3}
               className="speech-input"
               disabled={!connected}
               onKeyPress={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendSpeech(); }
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  sendSpeech();
+                }
               }}
             />
+
             <button
               className="send-btn"
               onClick={sendSpeech}
               disabled={!connected || !speechText.trim()}
             >
-              {useRealVoice && hasAudio ? '🎙️ Envoyer ma voix' : '📢 Envoyer au robot'}
+              {useRealVoice && hasAudio
+                ? '🎙️ Envoyer ma vraie voix'
+                : '📢 Envoyer au robot'}
             </button>
 
             {/* Phrases rapides */}
             <p className="quick-label">Phrases rapides :</p>
             <div className="quick-row">
-              {['Bonjour !', 'Très bien !', 'Bravo !', 'Comment tu vas ?',
-                'C\'est super !', 'Tu peux répéter ?', 'On continue !', 'Excellent !'].map(ph => (
+              {[
+                'Bonjour !', 'Très bien !', 'Bravo !',
+                'Comment tu vas ?', 'C\'est super !',
+                'Tu peux répéter ?', 'On continue !', 'Excellent !',
+              ].map(ph => (
                 <button key={ph} className="quick-btn"
-                        onClick={() => sendQuick(ph)}
-                        disabled={!connected}>{ph}</button>
+                  onClick={() => sendQuick(ph)}
+                  disabled={!connected}>
+                  {ph}
+                </button>
               ))}
             </div>
           </div>
@@ -349,7 +407,7 @@ export default function Controller({ roomCode, onEndSession }) {
               <h2>Scénarios thérapeutiques</h2>
             </div>
             <p className="card-desc">
-              Un scénario enchaîne plusieurs étapes automatiquement (3.5s entre chaque).
+              Un scénario enchaîne plusieurs étapes automatiquement (3.5s entre chacune).
             </p>
             {SCENARIOS.map((sc) => (
               <button key={sc.id}
@@ -359,7 +417,9 @@ export default function Controller({ roomCode, onEndSession }) {
               >
                 <div className="sc-top">
                   <span className="sc-name">{sc.name}</span>
-                  <span className="sc-steps">{sc.steps.length} étapes · {sc.steps.length * 3.5}s</span>
+                  <span className="sc-steps">
+                    {sc.steps.length} étapes · {sc.steps.length * 3.5}s
+                  </span>
                 </div>
                 <span className="sc-desc">{sc.desc}</span>
                 {running === sc.id && (
@@ -376,19 +436,23 @@ export default function Controller({ roomCode, onEndSession }) {
             <div className="card-header">
               <span className="card-icon">📝</span>
               <h2>Journal de session</h2>
-              <button className="clear-log" onClick={() => setLog([])}>Effacer</button>
+              <button className="clear-log" onClick={() => setLog([])}>
+                Effacer
+              </button>
             </div>
             <div className="log-box">
               {log.length === 0
                 ? <p className="log-empty">Les actions s'afficheront ici...</p>
                 : log.map((entry, i) => (
-                    <div key={i} className={`log-line ${i === 0 ? 'log-latest' : ''}`}>
+                    <div key={i}
+                      className={`log-line ${i === 0 ? 'log-latest' : ''}`}>
                       {entry}
                     </div>
                   ))
               }
             </div>
           </div>
+
         </div>
       </div>
     </div>
