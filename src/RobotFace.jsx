@@ -189,26 +189,83 @@ export default function RobotFace({ roomCode }) {
   // ================================================================
   // TTS FALLBACK — Voix synthétique française
   // ================================================================
-  const speak = useCallback((text) => {
-    window.speechSynthesis.cancel();
+  // ================================================================
+// TTS FALLBACK — VERSION CORRIGÉE POUR HTTPS/DÉPLOYÉ
+// Attend que les voix soient chargées avant de parler
+// ================================================================
+const speak = useCallback((text) => {
+  if (!text) return;
+
+  // Annuler toute parole en cours
+  window.speechSynthesis.cancel();
+
+  const doSpeak = () => {
     const u      = new SpeechSynthesisUtterance(text);
     const voices = window.speechSynthesis.getVoices();
-    const best   = voices.find(v =>
-      ['Google français', 'Microsoft Julie', 'Amelie', 'Thomas']
-        .some(p => v.name.includes(p)) || v.lang.startsWith('fr')
+
+    // Chercher une voix française
+    const best = voices.find(v =>
+      ['Google français', 'Microsoft Julie', 'Amelie', 'Thomas', 'Hortense']
+        .some(p => v.name.includes(p)) ||
+      v.lang === 'fr-FR' ||
+      v.lang === 'fr'
     );
-    if (best) u.voice = best;
+
+    if (best) {
+      u.voice = best;
+    }
+
     u.lang   = 'fr-FR';
     u.rate   = 0.92;
     u.pitch  = 1.1;
     u.volume = 1.0;
-    u.onstart = () => { setIsSpeaking(true); setSpeechText(text); };
-    u.onend   = () => {
+
+    u.onstart = () => {
+      setIsSpeaking(true);
+      setSpeechText(text);
+    };
+    u.onend = () => {
       setIsSpeaking(false);
       setTimeout(() => setSpeechText(''), 3000);
     };
+    u.onerror = (e) => {
+      console.error('Erreur TTS:', e);
+      setIsSpeaking(false);
+    };
+
     window.speechSynthesis.speak(u);
-  }, []);
+
+    // Fix Chrome bug : speechSynthesis s'arrête parfois après 15s
+    // On le "ping" toutes les 10s pour le maintenir actif
+    const keepAlive = setInterval(() => {
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.pause();
+        window.speechSynthesis.resume();
+      } else {
+        clearInterval(keepAlive);
+      }
+    }, 10000);
+  };
+
+  // Les voix sont déjà chargées → parler directement
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length > 0) {
+    doSpeak();
+  } else {
+    // Les voix ne sont pas encore chargées → attendre l'événement
+    window.speechSynthesis.onvoiceschanged = () => {
+      window.speechSynthesis.onvoiceschanged = null;
+      doSpeak();
+    };
+    // Timeout de sécurité : si onvoiceschanged ne se déclenche jamais
+    setTimeout(() => {
+      if (window.speechSynthesis.getVoices().length === 0) {
+        // Parler sans voix spécifique (voix par défaut du navigateur)
+        doSpeak();
+      }
+    }, 1000);
+  }
+}, []);
 
   // ================================================================
   // CONNEXION SOCKET.IO
@@ -342,6 +399,35 @@ export default function RobotFace({ roomCode }) {
         <div className={`rf-dot ${connected ? 'rf-dot-on' : 'rf-dot-off'}`}/>
         <span>{connected ? 'Connecté' : 'Reconnexion...'}</span>
       </div>
+      {/* ── Bouton DÉMARRER — débloque le son au premier clic ── */}
+{!audioUnlocked.current && (
+  <div
+    style={{
+      position: 'absolute',
+      bottom: 80,
+      left: '50%',
+      transform: 'translateX(-50%)',
+      background: 'rgba(0,0,0,0.5)',
+      color: 'white',
+      padding: '10px 20px',
+      borderRadius: 20,
+      fontSize: 13,
+      cursor: 'pointer',
+      backdropFilter: 'blur(4px)',
+      border: '1px solid rgba(255,255,255,0.2)',
+      whiteSpace: 'nowrap',
+    }}
+    onClick={() => {
+      // Forcer le déblocage audio
+      audioUnlocked.current = true;
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance('');
+      window.speechSynthesis.speak(u);
+    }}
+  >
+    🔊 Appuie ici pour activer le son
+  </div>
+)}
 
       {/* Badge expression */}
       <div className="rf-expr-badge">{expr.label}</div>
